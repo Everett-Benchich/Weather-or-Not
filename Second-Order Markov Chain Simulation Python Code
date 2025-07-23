@@ -1,0 +1,67 @@
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from collections import Counter
+
+sequence_str = "CLR→RA→SCT→RA→CLR→SCT→CLR→RA→SCT→CLR→RA→SCT" #This is dummy data. I used actual sequences that I gathered from Weatherspark.
+
+weather_sequence = sequence_str.strip().split("→")
+states = sorted(set(weather_sequence))
+state_to_idx = {state: idx for idx, state in enumerate(states)}
+idx_to_state = {idx: state for state, idx in state_to_idx.items()}
+n = len(states)
+
+second_order_matrix = np.zeros((n, n, n), dtype=int)
+for i in range(len(weather_sequence) - 2):
+    prev1 = state_to_idx[weather_sequence[i]]
+    prev2 = state_to_idx[weather_sequence[i + 1]]
+    curr = state_to_idx[weather_sequence[i + 2]]
+    second_order_matrix[prev1][prev2][curr] += 1
+
+prob_matrix = np.zeros_like(second_order_matrix, dtype=float)
+for i in range(n):
+    for j in range(n):
+        total = second_order_matrix[i][j].sum()
+        if total > 0:
+            prob_matrix[i][j] = second_order_matrix[i][j] / total
+
+num_days = 365 * 40
+simulated_weather = [random.choice(states), random.choice(states)]
+for _ in range(num_days - 2):
+    prev1 = state_to_idx[simulated_weather[-2]]
+    prev2 = state_to_idx[simulated_weather[-1]]
+    probs = prob_matrix[prev1][prev2]
+    next_state = np.random.choice(states, p=probs) if probs.sum() else random.choice(states)
+    simulated_weather.append(next_state)
+
+days_per_year = 365
+years = num_days // days_per_year
+yearly_frequencies = {state: [] for state in states}
+for year in range(years):
+    year_slice = simulated_weather[year * days_per_year:(year + 1) * days_per_year]
+    counts = Counter(year_slice)
+    for state in states:
+        yearly_frequencies[state].append(counts[state] / len(year_slice))
+
+df_freq = pd.DataFrame(yearly_frequencies)
+df_freq.index.name = 'Year'
+df_freq.index += 1982
+palette = sns.color_palette("tab10", len(states))
+plt.figure(figsize=(14, 8))
+x_vals = df_freq.index.values.astype(float)
+for i, state in enumerate(states):
+    color = palette[i]
+    plt.plot(df_freq.index, df_freq[state], label=state, color=color)
+    coeffs = np.polyfit(x_vals, df_freq[state], 1)
+    trend = np.polyval(coeffs, x_vals)
+    plt.plot(x_vals, trend, linestyle='--', color=color, label=f'{state} trend')
+plt.title('Second-Order Markov Chain Weather Simulation')
+plt.xlabel('Year')
+plt.ylabel('Relative Frequency')
+plt.legend(title='Weather State', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.xticks(ticks=range(1982, 1982 + len(df_freq), 5))
+plt.grid(True, linestyle='--', alpha=0.6)
+plt.tight_layout()
+plt.show()
