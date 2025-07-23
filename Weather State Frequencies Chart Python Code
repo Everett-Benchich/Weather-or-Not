@@ -1,0 +1,52 @@
+import numpy as np
+from scipy.stats import chisquare
+import matplotlib.pyplot as plt
+
+weather_states = ['CLR', 'SCT', 'OVC', 'RA', 'TS']
+actual_freq = np.array([0.30, 0.40, 0.15, 0.10, 0.05])
+sim1_freq = np.array([0.32, 0.36, 0.14, 0.12, 0.06])
+sim2_freq = np.array([0.35, 0.34, 0.13, 0.11, 0.07])
+# All of the above is dummy data. To use, insert true frequencies of first- and second-order simulations as well as actual data.
+
+def mse(actual, predicted):
+    return np.mean((actual - predicted) ** 2)
+
+def kl_divergence(p, q):
+    epsilon = 1e-10
+    p = np.clip(p, epsilon, 1)
+    q = np.clip(q, epsilon, 1)
+    return np.sum(p * np.log(p / q))
+
+def compute_p_value(observed, expected, total_count=1000):
+    observed = observed / np.sum(observed)
+    expected = expected / np.sum(expected)
+    obs_counts = observed * total_count
+    exp_counts = expected * total_count
+    return chisquare(f_obs=obs_counts, f_exp=exp_counts).pvalue
+
+mse1 = mse(actual_freq, sim1_freq)
+mse2 = mse(actual_freq, sim2_freq)
+kl1 = kl_divergence(actual_freq, sim1_freq)
+kl2 = kl_divergence(actual_freq, sim2_freq)
+p1 = compute_p_value(sim1_freq, actual_freq)
+p2 = compute_p_value(sim2_freq, actual_freq)
+
+print(f"MSE (First-Order): {mse1:.5f}")
+print(f"MSE (Second-Order): {mse2:.5f}")
+print(f"KL Divergence (First-Order): {kl1:.5f}")
+print(f"KL Divergence (Second-Order): {kl2:.5f}")
+print(f"P-value (First-Order): {p1:.5f}")
+print(f"P-value (Second-Order): {p2:.5f}")
+
+x = np.arange(len(weather_states))
+w = 0.25
+plt.bar(x - w, actual_freq, w, label='Actual', color='gray')
+plt.bar(x, sim1_freq, w, label='First-Order', color='steelblue')
+plt.bar(x + w, sim2_freq, w, label='Second-Order', color='gold')
+plt.xticks(x, weather_states)
+plt.ylabel('Relative Frequency')
+plt.title('Simulated vs Actual Weather State Frequencies')
+plt.legend()
+plt.grid(axis='y', linestyle='--', alpha=0.6)
+plt.tight_layout()
+plt.show()
