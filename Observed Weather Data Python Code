@@ -1,0 +1,99 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime, timedelta
+
+date_rng = pd.date_range(start='1/1/2000', end='12/31/2000 23:00', freq='H')
+dummy_hourly = pd.DataFrame(date_rng, columns=['datetime'])
+np.random.seed(0)
+dummy_hourly['precip'] = np.random.uniform(0, 5, size=len(dummy_hourly))
+dummy_hourly['cloudcover'] = np.random.uniform(0, 100, size=len(dummy_hourly))
+dummy_hourly['icon'] = np.random.choice(['rain', 'clear-day', 'thunderstorm'], len(dummy_hourly))
+dummy_hourly['conditions'] = np.random.choice(['Rain', 'Clear', 'Thunderstorm'], len(dummy_hourly))
+
+dummy_hourly['datetime'] = pd.to_datetime(dummy_hourly['datetime'])
+dummy_hourly.set_index('datetime', inplace=True)
+
+def is_thunderstorm(icon, conditions):
+    icon = str(icon).lower()
+    conditions = str(conditions).lower()
+    return ('thunderstorm' in icon) or ('thunderstorm' in conditions) or ('thunder' in conditions)
+
+dummy_hourly['is_thunderstorm'] = dummy_hourly.apply(
+    lambda row: is_thunderstorm(row['icon'], row['conditions']), axis=1)
+
+daily_from_hours = dummy_hourly.resample('D').agg({
+    'precip': 'sum',
+    'cloudcover': 'mean',
+    'is_thunderstorm': 'max'
+})
+
+def classify_daily(row):
+    if row['is_thunderstorm']:
+        return 'TS'
+    elif row['precip'] > 0:
+        return 'RA'
+    elif row['cloudcover'] < 20:
+        return 'CLR'
+    elif row['cloudcover'] < 60:
+        return 'SCT'
+    else:
+        return 'OVC'
+
+daily_from_hours['weather'] = daily_from_hours.apply(classify_daily, axis=1)
+daily_from_hours['year'] = daily_from_hours.index.year
+
+date_rng2 = pd.date_range(start='1/1/1990', end='12/31/1999', freq='D')
+dummy_daily = pd.DataFrame(date_rng2, columns=['date'])
+np.random.seed(1)
+dummy_daily['precip'] = np.random.uniform(0, 5, size=len(dummy_daily))
+dummy_daily['cloudcover'] = np.random.uniform(0, 100, size=len(dummy_daily))
+dummy_daily['conditions'] = np.random.choice(['Snow', 'Thunder', 'Rain', 'Clear', 'Cloudy'], len(dummy_daily))
+
+dummy_daily.set_index('date', inplace=True)
+
+def classify_daily_heuristic(row):
+    month = row.name.month
+    precip = row['precip']
+    cloud = row['cloudcover']
+    cond = str(row['conditions']).lower()
+    if 'snow' in cond:
+        return 'SN'
+    if 'thunder' in cond or (month in [6,7,8,9] and precip >= 10):
+        return 'TS'
+    if precip > 0:
+        return 'RA'
+    if cloud < 20:
+        return 'CLR'
+    elif cloud < 60:
+        return 'SCT'
+    else:
+        return 'OVC'
+
+dummy_daily['weather'] = dummy_daily.apply(classify_daily_heuristic, axis=1)
+dummy_daily['year'] = dummy_daily.index.year
+
+combined = pd.concat([
+    dummy_daily[['weather', 'year']],
+    daily_from_hours[['weather', 'year']]
+])
+
+counts = combined.groupby(['year', 'weather']).size().unstack(fill_value=0)
+freqs = counts.div(counts.sum(axis=1), axis=0)
+
+sns.set_style("whitegrid")
+palette = sns.color_palette("tab10", len(freqs.columns))
+plt.figure(figsize=(14, 8))
+
+for i, state in enumerate(freqs.columns):
+    plt.plot(freqs.index, freqs[state], label=state, color=palette[i])
+    trend = np.polyfit(freqs.index, freqs[state], 1)
+    plt.plot(freqs.index, np.polyval(trend, freqs.index), linestyle='--', color=palette[i])
+
+plt.title("Dummy Location: Simulated Weather State Frequencies (1990–2000)")
+plt.xlabel("Year")
+plt.ylabel("Proportion of Days")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.show()
