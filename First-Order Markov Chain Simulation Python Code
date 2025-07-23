@@ -1,0 +1,62 @@
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from collections import Counter
+
+sequence_str = "CLR→RA→SCT→RA→CLR→SCT→CLR→RA→SCT→CLR→RA→SCT" #This is dummy data. I used actual sequences that I gathered from Weatherspark.
+weather_sequence = sequence_str.split("→")
+states = sorted(set(weather_sequence))
+state_to_idx = {s: i for i, s in enumerate(states)}
+idx_to_state = {i: s for s, i in state_to_idx.items()}
+n = len(states)
+
+second_order_matrix = np.zeros((n, n, n), dtype=int)
+for i in range(len(weather_sequence) - 2):
+    a, b, c = (state_to_idx[weather_sequence[i]],
+               state_to_idx[weather_sequence[i + 1]],
+               state_to_idx[weather_sequence[i + 2]])
+    second_order_matrix[a][b][c] += 1
+
+prob_matrix = np.zeros_like(second_order_matrix, dtype=float)
+for i in range(n):
+    for j in range(n):
+        total = second_order_matrix[i][j].sum()
+        if total > 0:
+            prob_matrix[i][j] = second_order_matrix[i][j] / total
+
+num_days = 365 * 5
+sim = [random.choice(states), random.choice(states)]
+for _ in range(num_days - 2):
+    a = state_to_idx[sim[-2]]
+    b = state_to_idx[sim[-1]]
+    probs = prob_matrix[a][b]
+    sim.append(np.random.choice(states, p=probs) if probs.sum() > 0 else random.choice(states))
+
+years = num_days // 365
+freq = {s: [] for s in states}
+for y in range(years):
+    segment = sim[y * 365:(y + 1) * 365]
+    counts = Counter(segment)
+    total = len(segment)
+    for s in states:
+        freq[s].append(counts[s] / total)
+
+df = pd.DataFrame(freq)
+df.index = df.index + 2000
+palette = sns.color_palette("tab10", len(states))
+
+plt.figure(figsize=(10, 6))
+for i, s in enumerate(states):
+    plt.plot(df.index, df[s], label=s, color=palette[i])
+    trend = np.polyval(np.polyfit(df.index, df[s], 1), df.index)
+    plt.plot(df.index, trend, '--', color=palette[i], label=f"{s} trend")
+
+plt.title("Simulated Weather Trends")
+plt.xlabel("Year")
+plt.ylabel("Frequency")
+plt.ylim(0, 1)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.show()
